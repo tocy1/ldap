@@ -3,12 +3,13 @@ package ldap
 import (
 	"crypto/tls"
 	"io"
-	"log"
 	"net"
 	"strings"
 	"sync"
 
-	"github.com/nmcclain/asn1-ber"
+	log "github.com/sirupsen/logrus"
+
+	ber "github.com/nmcclain/asn1-ber"
 )
 
 type Binder interface {
@@ -44,6 +45,9 @@ type Unbinder interface {
 type Closer interface {
 	Close(boundDN string, conn net.Conn) error
 }
+type WhoAmI interface {
+	WhoAmI(boundDN string, identity string, conn net.Conn) (string, error)
+}
 
 //
 type Server struct {
@@ -58,6 +62,7 @@ type Server struct {
 	ExtendedFns map[string]Extender
 	UnbindFns   map[string]Unbinder
 	CloseFns    map[string]Closer
+	WhoAmIFns   map[string]WhoAmI
 	Quit        chan bool
 	EnforceLDAP bool
 	Stats       *Stats
@@ -95,6 +100,7 @@ func NewServer() *Server {
 	s.ExtendedFns = make(map[string]Extender)
 	s.UnbindFns = make(map[string]Unbinder)
 	s.CloseFns = make(map[string]Closer)
+	s.WhoAmIFns = make(map[string]WhoAmI)
 	s.BindFunc("", d)
 	s.SearchFunc("", d)
 	s.AddFunc("", d)
@@ -106,7 +112,9 @@ func NewServer() *Server {
 	s.ExtendedFunc("", d)
 	s.UnbindFunc("", d)
 	s.CloseFunc("", d)
+	s.WhoAmIFunc("", d)
 	s.Stats = nil
+
 	return s
 }
 func (server *Server) BindFunc(baseDN string, f Binder) {
@@ -141,6 +149,9 @@ func (server *Server) UnbindFunc(baseDN string, f Unbinder) {
 }
 func (server *Server) CloseFunc(baseDN string, f Closer) {
 	server.CloseFns[baseDN] = f
+}
+func (server *Server) WhoAmIFunc(baseDN string, f WhoAmI) {
+	server.WhoAmIFns[baseDN] = f
 }
 func (server *Server) QuitChannel(quit chan bool) {
 	server.Quit = quit
@@ -308,6 +319,28 @@ handler:
 			server.Stats.countUnbinds(1)
 			break handler // simply disconnect
 		case ApplicationExtendedRequest:
+			requestData, _ := ber.ReadPacket(req.Data)
+
+			if requestData.Data.String() == "1.3.6.1.4.1.4203.1.11.3" {
+				fnNames := []string{}
+				for k := range server.WhoAmIFns {
+					fnNames = append(fnNames, k)
+				}
+				fn := routeFunc(boundDN, fnNames)
+
+				var responsePacket *ber.Packet
+				result, err := server.WhoAmIFns[fn].WhoAmI(boundDN, "deleteDN", conn)
+				if err != nil {
+					responsePacket = encodeWhoAmIResponse(result, messageID, ApplicationExtendedResponse, LDAPResultNoSuchObject, LDAPResultCodeMap[LDAPResultNoSuchObject])
+				} else {
+					responsePacket = encodeWhoAmIResponse(result, messageID, ApplicationExtendedResponse, LDAPResultSuccess, LDAPResultCodeMap[LDAPResultSuccess])
+				}
+				if err = sendPacket(conn, responsePacket); err != nil {
+					log.Printf("sendPacket error %s", err.Error())
+					break handler
+				}
+			}
+
 			ldapResultCode := HandleExtendedRequest(req, boundDN, server.ExtendedFns, conn)
 			responsePacket := encodeLDAPResponse(messageID, ApplicationExtendedResponse, ldapResultCode, LDAPResultCodeMap[ldapResultCode])
 			if err = sendPacket(conn, responsePacket); err != nil {
@@ -402,6 +435,20 @@ func encodeLDAPResponse(messageID uint64, responseType uint8, ldapResultCode LDA
 	return responsePacket
 }
 
+func encodeWhoAmIResponse(result string, messageID uint64, responseType uint8, ldapResultCode LDAPResultCode, message string) *ber.Packet {
+	responsePacket := ber.Encode(ber.ClassUniversal, ber.TypeConstructed, ber.TagSequence, nil, "LDAP Response")
+	responsePacket.AppendChild(ber.NewInteger(ber.ClassUniversal, ber.TypePrimitive, ber.TagInteger, messageID, "Message ID"))
+	response := ber.Encode(ber.ClassApplication, ber.TypeConstructed, responseType, nil, ApplicationMap[responseType])
+	response.AppendChild(ber.NewInteger(ber.ClassUniversal, ber.TypePrimitive, ber.TagEnumerated, uint64(ldapResultCode), "resultCode: "))
+	response.AppendChild(ber.NewString(ber.ClassUniversal, ber.TypePrimitive, ber.TagOctetString, "", "matchedDN: "))
+	response.AppendChild(ber.NewString(ber.ClassUniversal, ber.TypePrimitive, ber.TagOctetString, message, "errorMessage: "))
+	whoAmIResponse := ber.Encode(ber.ClassUniversal, ber.TypeConstructed, ber.TagEmbeddedPDV, nil, "Attributes:")
+	whoAmIResponse.AppendChild(ber.NewString(ber.ClassUniversal, ber.TypePrimitive, ber.TagOctetString, result, "Identity: "))
+	response.AppendChild(whoAmIResponse)
+	responsePacket.AppendChild(response)
+	return responsePacket
+}
+
 //
 type defaultHandler struct {
 }
@@ -439,6 +486,10 @@ func (h defaultHandler) Unbind(boundDN string, conn net.Conn) (LDAPResultCode, e
 func (h defaultHandler) Close(boundDN string, conn net.Conn) error {
 	conn.Close()
 	return nil
+}
+
+func (h defaultHandler) WhoAmI(boundDN string, identity string, conn net.Conn) (string, error) {
+	return "", nil
 }
 
 //
