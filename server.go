@@ -322,18 +322,16 @@ handler:
 			requestData, _ := ber.ReadPacket(req.Data)
 
 			if requestData.Data.String() == "1.3.6.1.4.1.4203.1.11.3" {
-				fnNames := []string{}
-				for k := range server.WhoAmIFns {
-					fnNames = append(fnNames, k)
+				identity := boundDN
+				if strings.Contains(boundDN, "@") {
+					identity = strings.Split(boundDN, "@")[0]
 				}
-				fn := routeFunc(boundDN, fnNames)
 
 				var responsePacket *ber.Packet
-				result, err := server.WhoAmIFns[fn].WhoAmI(boundDN, "deleteDN", conn)
-				if err != nil {
-					responsePacket = encodeWhoAmIResponse(result, messageID, ApplicationExtendedResponse, LDAPResultNoSuchObject, LDAPResultCodeMap[LDAPResultNoSuchObject])
+				if identity == "" {
+					responsePacket = encodeWhoAmIResponse(identity, messageID, ApplicationExtendedResponse, LDAPResultNoSuchObject, LDAPResultCodeMap[LDAPResultNoSuchObject])
 				} else {
-					responsePacket = encodeWhoAmIResponse(result, messageID, ApplicationExtendedResponse, LDAPResultSuccess, LDAPResultCodeMap[LDAPResultSuccess])
+					responsePacket = encodeWhoAmIResponse(identity, messageID, ApplicationExtendedResponse, LDAPResultSuccess, LDAPResultCodeMap[LDAPResultSuccess])
 				}
 				if err = sendPacket(conn, responsePacket); err != nil {
 					log.Printf("sendPacket error %s", err.Error())
