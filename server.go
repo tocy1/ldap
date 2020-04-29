@@ -45,9 +45,6 @@ type Unbinder interface {
 type Closer interface {
 	Close(boundDN string, conn net.Conn) error
 }
-type WhoAmI interface {
-	WhoAmI(boundDN string, identity string, conn net.Conn) (string, error)
-}
 
 //
 type Server struct {
@@ -62,7 +59,6 @@ type Server struct {
 	ExtendedFns map[string]Extender
 	UnbindFns   map[string]Unbinder
 	CloseFns    map[string]Closer
-	WhoAmIFns   map[string]WhoAmI
 	Quit        chan bool
 	EnforceLDAP bool
 	Stats       *Stats
@@ -100,7 +96,6 @@ func NewServer() *Server {
 	s.ExtendedFns = make(map[string]Extender)
 	s.UnbindFns = make(map[string]Unbinder)
 	s.CloseFns = make(map[string]Closer)
-	s.WhoAmIFns = make(map[string]WhoAmI)
 	s.BindFunc("", d)
 	s.SearchFunc("", d)
 	s.AddFunc("", d)
@@ -112,7 +107,6 @@ func NewServer() *Server {
 	s.ExtendedFunc("", d)
 	s.UnbindFunc("", d)
 	s.CloseFunc("", d)
-	s.WhoAmIFunc("", d)
 	s.Stats = nil
 
 	return s
@@ -149,9 +143,6 @@ func (server *Server) UnbindFunc(baseDN string, f Unbinder) {
 }
 func (server *Server) CloseFunc(baseDN string, f Closer) {
 	server.CloseFns[baseDN] = f
-}
-func (server *Server) WhoAmIFunc(baseDN string, f WhoAmI) {
-	server.WhoAmIFns[baseDN] = f
 }
 func (server *Server) QuitChannel(quit chan bool) {
 	server.Quit = quit
@@ -484,10 +475,6 @@ func (h defaultHandler) Unbind(boundDN string, conn net.Conn) (LDAPResultCode, e
 func (h defaultHandler) Close(boundDN string, conn net.Conn) error {
 	conn.Close()
 	return nil
-}
-
-func (h defaultHandler) WhoAmI(boundDN string, identity string, conn net.Conn) (string, error) {
-	return "", nil
 }
 
 //
