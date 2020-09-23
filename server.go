@@ -1,6 +1,7 @@
 package ldap
 
 import (
+	"bytes"
 	"crypto/tls"
 	"io"
 	"net"
@@ -317,13 +318,13 @@ handler:
 				if strings.Contains(boundDN, "@") {
 					identity = strings.Split(boundDN, "@")[0]
 				}
-
 				var responsePacket *ber.Packet
 				if identity == "" {
 					responsePacket = encodeWhoAmIResponse(identity, messageID, ApplicationExtendedResponse, LDAPResultNoSuchObject, LDAPResultCodeMap[LDAPResultNoSuchObject])
 				} else {
 					responsePacket = encodeWhoAmIResponse(identity, messageID, ApplicationExtendedResponse, LDAPResultSuccess, LDAPResultCodeMap[LDAPResultSuccess])
 				}
+
 				if err = sendPacket(conn, responsePacket); err != nil {
 					log.Printf("sendPacket error %s", err.Error())
 					break handler
@@ -420,6 +421,7 @@ func encodeLDAPResponse(messageID uint64, responseType uint8, ldapResultCode LDA
 	reponse.AppendChild(ber.NewInteger(ber.ClassUniversal, ber.TypePrimitive, ber.TagEnumerated, uint64(ldapResultCode), "resultCode: "))
 	reponse.AppendChild(ber.NewString(ber.ClassUniversal, ber.TypePrimitive, ber.TagOctetString, "", "matchedDN: "))
 	reponse.AppendChild(ber.NewString(ber.ClassUniversal, ber.TypePrimitive, ber.TagOctetString, message, "errorMessage: "))
+
 	responsePacket.AppendChild(reponse)
 	return responsePacket
 }
@@ -431,8 +433,15 @@ func encodeWhoAmIResponse(result string, messageID uint64, responseType uint8, l
 	response.AppendChild(ber.NewInteger(ber.ClassUniversal, ber.TypePrimitive, ber.TagEnumerated, uint64(ldapResultCode), "resultCode: "))
 	response.AppendChild(ber.NewString(ber.ClassUniversal, ber.TypePrimitive, ber.TagOctetString, "", "matchedDN: "))
 	response.AppendChild(ber.NewString(ber.ClassUniversal, ber.TypePrimitive, ber.TagOctetString, message, "errorMessage: "))
-	whoAmIResponse := ber.Encode(ber.ClassUniversal, ber.TypeConstructed, ber.TagEmbeddedPDV, nil, "Attributes:")
-	whoAmIResponse.AppendChild(ber.NewString(ber.ClassUniversal, ber.TypePrimitive, ber.TagOctetString, result, "Identity: "))
+	whoAmIResponse := ber.Encode(ber.ClassUniversal, ber.TypePrimitive, ber.TagEmbeddedPDV, "", "Attributes:")
+
+	identity := &ber.Packet{}
+	identity.Data = new(bytes.Buffer)
+	identity.Data.Write([]byte(result))
+	identity.Value = result
+	identity.Raw = true
+	whoAmIResponse.AppendChild(identity)
+
 	response.AppendChild(whoAmIResponse)
 	responsePacket.AppendChild(response)
 	return responsePacket
