@@ -1,14 +1,16 @@
 package ldap
 
 import (
+	"bytes"
 	"crypto/tls"
 	"io"
-	"log"
 	"net"
 	"strings"
 	"sync"
 
-	"github.com/nmcclain/asn1-ber"
+	log "github.com/sirupsen/logrus"
+
+	ber "github.com/edwardzsmith/asn1-ber"
 )
 
 type Binder interface {
@@ -107,6 +109,7 @@ func NewServer() *Server {
 	s.UnbindFunc("", d)
 	s.CloseFunc("", d)
 	s.Stats = nil
+
 	return s
 }
 func (server *Server) BindFunc(baseDN string, f Binder) {
@@ -308,6 +311,26 @@ handler:
 			server.Stats.countUnbinds(1)
 			break handler // simply disconnect
 		case ApplicationExtendedRequest:
+			requestData, _ := ber.ReadPacket(req.Data)
+
+			if requestData.Data.String() == "1.3.6.1.4.1.4203.1.11.3" {
+				identity := boundDN
+				if strings.Contains(boundDN, "@") {
+					identity = strings.Split(boundDN, "@")[0]
+				}
+				var responsePacket *ber.Packet
+				if identity == "" {
+					responsePacket = encodeWhoAmIResponse(identity, messageID, ApplicationExtendedResponse, LDAPResultNoSuchObject, LDAPResultCodeMap[LDAPResultNoSuchObject])
+				} else {
+					responsePacket = encodeWhoAmIResponse(identity, messageID, ApplicationExtendedResponse, LDAPResultSuccess, LDAPResultCodeMap[LDAPResultSuccess])
+				}
+
+				if err = sendPacket(conn, responsePacket); err != nil {
+					log.Printf("sendPacket error %s", err.Error())
+					break handler
+				}
+			}
+
 			ldapResultCode := HandleExtendedRequest(req, boundDN, server.ExtendedFns, conn)
 			responsePacket := encodeLDAPResponse(messageID, ApplicationExtendedResponse, ldapResultCode, LDAPResultCodeMap[ldapResultCode])
 			if err = sendPacket(conn, responsePacket); err != nil {
@@ -398,7 +421,29 @@ func encodeLDAPResponse(messageID uint64, responseType uint8, ldapResultCode LDA
 	reponse.AppendChild(ber.NewInteger(ber.ClassUniversal, ber.TypePrimitive, ber.TagEnumerated, uint64(ldapResultCode), "resultCode: "))
 	reponse.AppendChild(ber.NewString(ber.ClassUniversal, ber.TypePrimitive, ber.TagOctetString, "", "matchedDN: "))
 	reponse.AppendChild(ber.NewString(ber.ClassUniversal, ber.TypePrimitive, ber.TagOctetString, message, "errorMessage: "))
+
 	responsePacket.AppendChild(reponse)
+	return responsePacket
+}
+
+func encodeWhoAmIResponse(result string, messageID uint64, responseType uint8, ldapResultCode LDAPResultCode, message string) *ber.Packet {
+	responsePacket := ber.Encode(ber.ClassUniversal, ber.TypeConstructed, ber.TagSequence, nil, "LDAP Response")
+	responsePacket.AppendChild(ber.NewInteger(ber.ClassUniversal, ber.TypePrimitive, ber.TagInteger, messageID, "Message ID"))
+	response := ber.Encode(ber.ClassApplication, ber.TypeConstructed, responseType, nil, ApplicationMap[responseType])
+	response.AppendChild(ber.NewInteger(ber.ClassUniversal, ber.TypePrimitive, ber.TagEnumerated, uint64(ldapResultCode), "resultCode: "))
+	response.AppendChild(ber.NewString(ber.ClassUniversal, ber.TypePrimitive, ber.TagOctetString, "", "matchedDN: "))
+	response.AppendChild(ber.NewString(ber.ClassUniversal, ber.TypePrimitive, ber.TagOctetString, message, "errorMessage: "))
+	whoAmIResponse := ber.Encode(ber.ClassUniversal, ber.TypePrimitive, ber.TagEmbeddedPDV, "", "Attributes:")
+
+	identity := &ber.Packet{}
+	identity.Data = new(bytes.Buffer)
+	identity.Data.Write([]byte(result))
+	identity.Value = result
+	identity.Raw = true
+	whoAmIResponse.AppendChild(identity)
+
+	response.AppendChild(whoAmIResponse)
+	responsePacket.AppendChild(response)
 	return responsePacket
 }
 
