@@ -315,9 +315,12 @@ handler:
 
 			if requestData.Data.String() == "1.3.6.1.4.1.4203.1.11.3" {
 				identity := boundDN
+
 				if strings.Contains(boundDN, "@") {
-					identity = strings.Split(boundDN, "@")[0]
+					parts := strings.Split(boundDN, "@")
+					identity = parts[1] + "\\" + parts[0]
 				}
+
 				var responsePacket *ber.Packet
 				if identity == "" {
 					responsePacket = encodeWhoAmIResponse(identity, messageID, ApplicationExtendedResponse, LDAPResultNoSuchObject, LDAPResultCodeMap[LDAPResultNoSuchObject])
