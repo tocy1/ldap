@@ -339,11 +339,13 @@ handler:
 				responsePacket = encodeLDAPResponse(messageID, ApplicationExtendedResponse, ldapResultCode, LDAPResultCodeMap[ldapResultCode])
 			}
 			log.Println("Just success")
-
+			log.Println("Just success  gctcrtc")
+			log.Println(responsePacket)
 			if err = sendPacket(conn, responsePacket); err != nil {
 				log.Printf("sendPacket error %s", err.Error())
 				break handler
 			}
+			log.Println("Just success 45666")
 		case ApplicationAbandonRequest:
 			HandleAbandonRequest(req, boundDN, server.AbandonFns, conn)
 			break handler
