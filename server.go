@@ -312,6 +312,7 @@ handler:
 			break handler // simply disconnect
 		case ApplicationExtendedRequest:
 			requestData, _ := ber.ReadPacket(req.Data)
+			log.Println(requestData.Data.String())
 
 			if requestData.Data.String() == "1.3.6.1.4.1.4203.1.11.3" {
 				identity := boundDN
