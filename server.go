@@ -441,10 +441,10 @@ func encodeWhoAmIResponse(result string, messageID uint64, responseType uint8, l
 	responsePacket.AppendChild(ber.NewInteger(ber.ClassUniversal, ber.TypePrimitive, ber.TagInteger, messageID, "Message ID"))
 	response := ber.Encode(ber.ClassApplication, ber.TypeConstructed, responseType, nil, ApplicationMap[responseType])
 	response.AppendChild(ber.NewInteger(ber.ClassUniversal, ber.TypePrimitive, ber.TagEnumerated, uint64(ldapResultCode), "resultCode: "))
-	response.AppendChild(ber.NewString(ber.ClassUniversal, ber.TypePrimitive, ber.TagOctetString, result, "matchedDN: "))
+	response.AppendChild(ber.NewString(ber.ClassUniversal, ber.TypePrimitive, ber.TagOctetString, "", "matchedDN: "))
 	//response.AppendChild(ber.NewString(ber.ClassUniversal, ber.TypePrimitive, ber.TagOctetString, message, "errorMessage: "))
 	response.AppendChild(ber.NewString(ber.ClassUniversal, ber.TypePrimitive, ber.TagOctetString, "", "errorMessage: "))
-	whoAmIResponse := ber.Encode(ber.ClassUniversal, ber.TypePrimitive, ber.TagEmbeddedPDV, "", "Attributes:")
+	whoAmIResponse := ber.Encode(ber.ClassUniversal, ber.TypePrimitive, ber.TagEmbeddedPDV, result, "")
 
 	identity := &ber.Packet{}
 	identity.Data = new(bytes.Buffer)
