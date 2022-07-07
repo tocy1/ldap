@@ -316,11 +316,13 @@ handler:
 
 			if requestData.Data.String() == "1.3.6.1.4.1.4203.1.11.3" {
 				identity := boundDN
+				log.Println("identity1", identity)
 
 				if strings.Contains(boundDN, "@") {
 					parts := strings.Split(boundDN, "@")
 					identity = parts[1] + "\\" + parts[0]
 				}
+				log.Println("identity2", identity)
 
 				var responsePacket *ber.Packet
 				if identity == "" {
@@ -334,7 +336,7 @@ handler:
 					break handler
 				}
 			}
-
+			log.Println("Just success")
 			ldapResultCode := HandleExtendedRequest(req, boundDN, server.ExtendedFns, conn)
 			responsePacket := encodeLDAPResponse(messageID, ApplicationExtendedResponse, ldapResultCode, LDAPResultCodeMap[ldapResultCode])
 			if err = sendPacket(conn, responsePacket); err != nil {
