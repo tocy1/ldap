@@ -436,6 +436,7 @@ func encodeLDAPResponse(messageID uint64, responseType uint8, ldapResultCode LDA
 }
 
 func encodeWhoAmIResponse(result string, messageID uint64, responseType uint8, ldapResultCode LDAPResultCode, message string) *ber.Packet {
+	log.Println("encoding whoami response")
 	responsePacket := ber.Encode(ber.ClassUniversal, ber.TypeConstructed, ber.TagSequence, nil, "LDAP Response")
 	responsePacket.AppendChild(ber.NewInteger(ber.ClassUniversal, ber.TypePrimitive, ber.TagInteger, messageID, "Message ID"))
 	response := ber.Encode(ber.ClassApplication, ber.TypeConstructed, responseType, nil, ApplicationMap[responseType])
