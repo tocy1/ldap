@@ -445,16 +445,16 @@ func encodeWhoAmIResponse(result string, messageID uint64, responseType uint8, l
 	//response.AppendChild(ber.NewString(ber.ClassUniversal, ber.TypePrimitive, ber.TagOctetString, message, "errorMessage: "))
 	response.AppendChild(ber.NewString(ber.ClassUniversal, ber.TypePrimitive, ber.TagOctetString, "", "errorMessage: "))
 	response.AppendChild(ber.NewString(ber.ClassUniversal, ber.TypePrimitive, ber.TagOctetString, result, ""))
-	whoAmIResponse := ber.Encode(ber.ClassUniversal, ber.TypePrimitive, ber.TagEmbeddedPDV, result, "")
+	// whoAmIResponse := ber.Encode(ber.ClassUniversal, ber.TypePrimitive, ber.TagEmbeddedPDV, result, "")
 
 	identity := &ber.Packet{}
 	identity.Data = new(bytes.Buffer)
 	identity.Data.Write([]byte(result))
 	identity.Value = result
 	identity.Raw = true
-	whoAmIResponse.AppendChild(identity)
+	// whoAmIResponse.AppendChild(identity)
 
-	response.AppendChild(whoAmIResponse)
+	response.AppendChild(identity)
 	responsePacket.AppendChild(response)
 	return responsePacket
 }
